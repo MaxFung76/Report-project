@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Excel 報表處理</title>
+    <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --secondary-color: #FFC107;
+            --success-color: #4CAF50;
+            --error-color: #f44336;
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(145deg, #f5f7fa 0%, #e4e9f2 100%);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .header {
+            background: linear-gradient(145deg, #1976D2, #2196F3);
+            color: white;
+            padding: 50px 0;
+            text-align: center;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            border-radius: 0 0 20px 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.8em;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            margin-top: 12px;
+            opacity: 0.9;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            margin: 0 0 20px 0;
+            color: #333;
+        }
+
+        .upload-zone p {
+            font-size: 1em;
+            color: #666;
+            margin: 0 0 20px 0;
+        }
+
+        .file-info {
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .message {
+            font-size: 0.95em;
+        }
+
+        .file-card {
+            font-size: 0.95em;
+        }
+        .upload-zone {
+            border: 2.5px dashed #e0e0e0;
+            border-radius: 15px;
+            padding: 40px 30px;
+            text-align: center;
+            transition: all 0.4s ease;
+            background: #fafafa;
+            margin-top: 25px;
+            cursor: pointer;
+        }
+
+        .upload-zone.dragover {
+            border-color: var(--primary-color);
+            background: #E3F2FD;
+            transform: scale(1.02);
+        }
+
+        .upload-zone.success {
+            border-color: var(--success-color);
+            background: #E8F5E9;
+        }
+
+        .file-info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f1f3f4;
+            border-radius: 6px;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .header p {
+            font-size: 1.2em;
+            margin-top: 15px;
+            opacity: 0.95;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+        .upload-section {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            transition: all 0.4s ease;
+            position: relative;
+        }
+
+        .upload-section:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.12);
+        }
+        .upload-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(90deg, #2196F3, #1976D2);
+        }
+        .files-section {
+            background: white;
+            border-radius: 15px;
+            padding: 35px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+            margin-top: 40px;
+        }
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .file-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            border: 1px solid #eee;
+        }
+        .file-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-color: #2196F3;
+        }
+        .download-btn {
+            background: var(--primary-color);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }
+        .download-btn:hover {
+            background: #1976D2;
+            transform: translateY(-2px);
+            box-shadow: 0 3px 8px rgba(33, 150, 243, 0.3);
+        }
+        .message {
+            margin-top: 15px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+        .message.processing {
+            background: #E3F2FD;
+            color: #1976D2;
+            border-left: 4px solid #2196F3;
+        }
+        .message.success {
+            background: #E8F5E9;
+            color: #2E7D32;
+            border-left: 4px solid #4CAF50;
+        }
+        .message.error {
+            background: #FFEBEE;
+            color: #C62828;
+            border-left: 4px solid #f44336;
+        }
+        @keyframes slideIn {
+            from { 
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        button[type="submit"] {
+            background: linear-gradient(145deg, #2196F3, #1976D2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(33,150,243,0.2);
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+        button[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: linear-gradient(135deg, #1E88E5, #1565C0);
+        }
+        button[type="submit"]:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .custom-file-input {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(145deg, #2196F3, #1976D2);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-right: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            font-size: 1em;
+            box-shadow: 0 4px 12px rgba(33,150,243,0.2);
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+        .custom-file-input:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: linear-gradient(135deg, #1E88E5, #1565C0);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="container">
+            <h1>Excel 報表處理系統</h1>
+            <p>快速處理並下載 Azure 與騰訊雲報表檔案</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="upload-grid">
+            <div class="upload-section">
+                <h2>Azure 報表處理</h2>
+                <div class="upload-zone" id="azureDropZone">
+                    <p>拖曳 Excel 檔案至此處或點擊選擇檔案</p>
+                    <form id="azureForm">
+                        <label class="custom-file-input">
+                            <svg viewBox="0 0 24 24" width="24" height="24" style="margin-right: 8px;">
+                                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            選擇檔案
+                            <input type="file" accept=".xlsx" required style="display: none;">
+                        </label>
+                        <button type="submit">處理 Azure 報表</button>
+                    </form>
+                    <div class="file-info" id="azureFileInfo"></div>
+                </div>
+                <div id="azureMessage" class="message"></div>
+            </div>
+
+            <div class="upload-section">
+                <h2>騰訊雲報表處理</h2>
+                <div class="upload-zone" id="tencentDropZone">
+                    <p>拖曳 Excel/CSV 檔案至此處或點擊選擇檔案</p>
+                    <form id="tencentForm">
+                        <label class="custom-file-input">
+                            <svg viewBox="0 0 24 24" width="24" height="24" style="margin-right: 8px;">
+                                <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                            選擇檔案
+                            <input type="file" accept=".xlsx,.csv" required style="display: none;">
+                        </label>
+                        <button type="submit">處理騰訊雲報表</button>
+                    </form>
+                    <div class="file-info" id="tencentFileInfo"></div>
+                </div>
+                <div id="tencentMessage" class="message"></div>
+            </div>
+        </div>
+
+        <div class="files-section">
+            <h2>已處理檔案列表</h2>
+            <div id="filesList" class="files-grid">
+                <!-- 檔案列表將通過 JavaScript 動態填充 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            function updateFileInfo(fileInput, infoId) {
+                const fileInfo = document.getElementById(infoId);
+                if (fileInput.files && fileInput.files[0]) {
+                    const file = fileInput.files[0];
+                    fileInfo.textContent = `已選擇: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+                    fileInfo.classList.add('show');
+                } else {
+                    fileInfo.textContent = '';
+                    fileInfo.classList.remove('show');
+                }
+            }
+            // 修改 handleDragAndDrop 函數
+            function handleDragAndDrop(dropZoneId, formId, fileInfoId) {
+                const dropZone = document.getElementById(dropZoneId);
+                const form = document.getElementById(formId);
+                const fileInput = form.querySelector('input[type="file"]');
+            
+                fileInput.addEventListener('change', () => {
+                    updateFileInfo(fileInput, fileInfoId);
+                    dropZone.classList.remove('dragover');
+                    dropZone.classList.add('success');
+                    setTimeout(() => {
+                        dropZone.classList.remove('success');
+                    }, 2000);
+                });
+            
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
+                });
+            
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, () => {
+                        dropZone.classList.add('dragover');
+                    });
+                });
+            
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, () => {
+                        dropZone.classList.remove('dragover');
+                    });
+                });
+            
+                dropZone.addEventListener('drop', (e) => {
+                    const dt = e.dataTransfer;
+                    const files = dt.files;
+                    
+                    if (files.length > 0) {
+                        fileInput.files = files;
+                        updateFileInfo(fileInput, fileInfoId);
+                        dropZone.classList.add('success');
+                        setTimeout(() => {
+                            dropZone.classList.remove('success');
+                        }, 2000);
+                    }
+                });
+            }
+            function handleSubmit(formId, endpoint) {
+                const form = document.getElementById(formId);
+                const messageDiv = document.getElementById(formId.replace('Form', 'Message'));
+                const submitButton = form.querySelector('button');
+                const fileInput = form.querySelector('input[type="file"]');
+                return async (e) => {
+                    e.preventDefault();
+                    
+                    // 檢查文件類型
+                    const file = fileInput.files[0];
+                    if (!file) {
+                        showMessage(messageDiv, '請選擇檔案', 'error');
+                        return;
+                    }
+                    const fileType = formId === 'azureForm' ? 'xlsx' : 'xlsx,csv';
+                    const fileExt = file.name.split('.').pop().toLowerCase();
+                    if (!fileType.includes(fileExt)) {
+                        showMessage(messageDiv, `請選擇正確的檔案格式 (${fileType})`, 'error');
+                        return;
+                    }
+                    submitButton.disabled = true;
+                    showMessage(messageDiv, '處理中...', 'processing');
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const response = await fetch(endpoint, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (!response.ok) {
+                            throw new Error(`伺服器錯誤: ${response.status}`);
+                        }
+                        const result = await response.json();
+                        showMessage(messageDiv, result.message, 'success', 3000);
+                        
+                        // 清除文件輸入
+                        fileInput.value = '';
+                        const fileInfo = document.getElementById(formId.replace('Form', 'FileInfo'));
+                        if (fileInfo) fileInfo.textContent = '';
+                        // 更新文件列表
+                        await loadProcessedFiles();
+                    } catch (error) {
+                        showMessage(messageDiv, '處理失敗：' + error.message, 'error');
+                    } finally {
+                        submitButton.disabled = false;
+                    }
+                };
+            }
+
+            function showMessage(element, message, type, duration = 0) {
+                element.textContent = message;
+                element.className = `message ${type}`;
+                element.style.display = 'block';
+                
+                if (duration > 0) {
+                    setTimeout(() => {
+                        element.style.display = 'none';
+                    }, duration);
+                }
+            }
+
+            async function downloadFile(url, filename) {
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // 等待一下確保下載開始
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            // 初始化拖放和提交處理
+            handleDragAndDrop('azureDropZone', 'azureForm', 'azureFileInfo');
+            handleDragAndDrop('tencentDropZone', 'tencentForm', 'tencentFileInfo');
+
+            document.getElementById('azureForm').onsubmit = handleSubmit('azureForm', '/process-azure');
+            document.getElementById('tencentForm').onsubmit = handleSubmit('tencentForm', '/process-tencent');
+
+            async function loadProcessedFiles() {
+                try {
+                    const response = await fetch('/processed-files');
+                    const files = await response.json();
+                    const filesGrid = document.getElementById('filesList');
+                    
+                    if (files.length === 0) {
+                        filesGrid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #666;">暫無處理完成的檔案</p>';
+                        return;
+                    }
+
+                    filesGrid.innerHTML = files.map(file => `
+                        <div class="file-card">
+                            <div>
+                                <div style="font-weight: 500;">${file.name}</div>
+                                <small style="color: #666;">${file.type}</small>
+                            </div>
+                            <a href="${file.path}" class="download-btn" download>
+                                下載檔案
+                            </a>
+                        </div>
+                    `).join('');
+                } catch (error) {
+                    console.error('載入檔案列表失敗:', error);
+                }
+            }
+
+            // 初始加載文件列表
+            loadProcessedFiles();
+            // 定期更新文件列表
+            setInterval(loadProcessedFiles, 5000);
+        });
+
+        async function downloadAll() {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message processing';
+                messageDiv.style.display = 'block';
+                messageDiv.textContent = '正在打包文件...';
+                
+                const filesSection = document.querySelector('.files-section');
+                filesSection.insertBefore(messageDiv, document.getElementById('filesList'));
+                try {
+                    const response = await fetch('/download-all');
+                    if (!response.ok) {
+                        throw new Error(`伺服器錯誤: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    
+                    if (result.zipPath) {
+                        messageDiv.className = 'message success';
+                        messageDiv.textContent = '打包完成，請選擇儲存位置...';
+                        
+                        // 創建一個隱藏的 <a> 元素，並設置 download 屬性
+                        const link = document.createElement('a');
+                        link.href = result.zipPath;
+                        link.download = result.zipPath.split('/').pop();
+                        
+                        // 觸發檔案選擇對話框
+                        link.style.display = 'none';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        // 3秒後移除提示
+                        setTimeout(() => {
+                            messageDiv.remove();
+                        }, 3000);
+                    } else {
+                        throw new Error('未獲取到下載路徑');
+                    }
+                } catch (error) {
+                    console.error('下載失敗:', error);
+                    messageDiv.className = 'message error';
+                    messageDiv.textContent = `下載失敗：${error.message}`;
+                    
+                    // 5秒後移除錯誤提示
+                    setTimeout(() => {
+                        messageDiv.remove();
+                    }, 5000);
+                }
+            }
+    </script>
+</body>
+</html>
