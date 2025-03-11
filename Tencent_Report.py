@@ -37,15 +37,10 @@ def process_excel(file_path):
     sheet_name = f"{last_month.strftime('%b_%Y')}"
     
     # 根據Owner Account ID分組並保存到不同的Excel文件
+    current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
     for owner_id, data in df_filtered.groupby('Owner Account ID'):
-        output_file = f'{output_folder}/output_{owner_id}.xlsx'
-        
-        # 如果文件已存在，追加新的工作表
-        if os.path.exists(output_file):
-            with pd.ExcelWriter(output_file, engine='openpyxl', mode='a') as writer:
-                data.to_excel(writer, sheet_name=sheet_name, index=False)
-        else:
-            data.to_excel(output_file, index=False)
+        output_file = f'{output_folder}/output_{owner_id}_{current_time}.xlsx'
+        data.to_excel(output_file, sheet_name=sheet_name, index=False)
     
     messagebox.showinfo('成功', 'Excel文件已成功處理並保存！')
 
