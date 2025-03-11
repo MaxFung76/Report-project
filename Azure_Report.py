@@ -39,7 +39,7 @@ class ExcelProcessor:
         output_path = Path(self.config['output_folder'])
         if not output_path.exists():
             output_path.mkdir(parents=True)
-            logging.info(f"創建輸出目錄：{output_path}")
+            logging.info("創建輸出目錄")
 
     def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """清理數據
@@ -61,7 +61,7 @@ class ExcelProcessor:
             df = df.drop(columns=self.config['columns_to_delete'])
             return df
         except Exception as e:
-            logging.error(f"數據清理過程中發生錯誤：{str(e)}")
+            logging.error("數據清理過程中發生錯誤")
             raise
 
     def _calculate_totals(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -84,7 +84,7 @@ class ExcelProcessor:
             
             return df
         except Exception as e:
-            logging.error(f"計算總計時發生錯誤：{str(e)}")
+            logging.error("計算總計時發生錯誤")
             raise
 
     def _get_sheet_name(self) -> str:
@@ -100,18 +100,13 @@ class ExcelProcessor:
             data: 要保存的數據
         """
         try:
-            file_path = Path(self.config['output_folder']) / f"{customer}.xlsx"
+            current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+            file_path = Path(self.config['output_folder']) / f"{customer}_{current_time}.xlsx"
             sheet_name = self._get_sheet_name()
-
-            if file_path.exists():
-                with pd.ExcelWriter(file_path, engine='openpyxl', mode='a') as writer:
-                    data.to_excel(writer, sheet_name=sheet_name, index=False)
-            else:
-                data.to_excel(file_path, index=False)
-
-            logging.info(f"成功保存客戶 {customer} 的數據到 {file_path}")
+            data.to_excel(file_path, sheet_name=sheet_name, index=False)
+            logging.info("成功保存客戶數據")
         except Exception as e:
-            logging.error(f"保存客戶 {customer} 的數據時發生錯誤：{str(e)}")
+            logging.error("保存客戶數據時發生錯誤")
             raise
 
     def process_excel(self, file_path: str) -> None:
@@ -121,11 +116,11 @@ class ExcelProcessor:
             file_path: Excel 文件路徑
         """
         try:
-            logging.info(f"開始處理文件：{file_path}")
+            logging.info("開始處理文件")
             
             # 讀取 Excel 文件
             df = pd.read_excel(file_path)
-            logging.info(f"成功讀取文件，共 {len(df)} 行數據")
+            logging.info("成功讀取文件")
 
             # 清理數據
             df = self._clean_data(df)
@@ -141,7 +136,7 @@ class ExcelProcessor:
             logging.info("文件處理完成")
             return True
         except Exception as e:
-            logging.error(f"處理文件時發生錯誤：{str(e)}")
+            logging.error("處理文件時發生錯誤")
             raise
 
 def main(file_path: str) -> bool:
@@ -157,7 +152,7 @@ def main(file_path: str) -> bool:
         processor = ExcelProcessor(CONFIG)
         return processor.process_excel(file_path)
     except Exception as e:
-        logging.error(f"程序執行失敗：{str(e)}")
+        logging.error("程序執行失敗")
         return False
 
 if __name__ == '__main__':
@@ -171,9 +166,9 @@ if __name__ == '__main__':
                 if main(file_path):
                     messagebox.showinfo("成功", "Excel 文件處理完成！")
                 else:
-                    messagebox.showerror("錯誤", "處理過程中發生錯誤，請查看日誌文件了解詳情。")
+                    messagebox.showerror("錯誤", "處理過程中發生錯誤，請聯繫系統管理員。")
             except Exception as e:
-                messagebox.showerror("錯誤", f"處理失敗：{str(e)}")
+                messagebox.showerror("錯誤", "處理失敗，請聯繫系統管理員。")
 
     # 創建主視窗
     root = tk.Tk()
