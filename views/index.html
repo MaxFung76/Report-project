@@ -795,17 +795,33 @@
             </div>
         </div>
 
-        <div class="files-section">
-            <h2>已處理檔案列表</h2>
+        <!-- 已移除冗餘的「已處理檔案列表」區域，因為已有專門的Azure和騰訊雲報表檔案區域 -->
+
+        <div class="files-section azure-files">
+            <h2>Azure 報表檔案</h2>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <span></span>
-                <button id="downloadAllBtn" class="download-all-btn" onclick="downloadAll()">
+                <button class="download-all-btn" onclick="downloadAzureAll()">
                     <i class="fas fa-download"></i>
-                    下載全部
+                    下載全部 Azure 報表
                 </button>
             </div>
-            <div id="filesList" class="files-grid">
-                <!-- 檔案列表將通過 JavaScript 動態填充 -->
+            <div id="azureFilesList" class="files-grid">
+                <!-- Azure 檔案列表將通過 JavaScript 動態填充 -->
+            </div>
+        </div>
+
+        <div class="files-section tencent-files">
+            <h2>騰訊雲報表檔案</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <span></span>
+                <button class="download-all-btn" onclick="downloadTencentAll()">
+                    <i class="fas fa-download"></i>
+                    下載全部騰訊雲報表
+                </button>
+            </div>
+            <div id="tencentFilesList" class="files-grid">
+                <!-- 騰訊雲檔案列表將通過 JavaScript 動態填充 -->
             </div>
         </div>
     </div>
@@ -964,16 +980,22 @@
                 }
             }
 
-            async function downloadFile(url, filename) {
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                // 等待一下確保下載開始
-                await new Promise(resolve => setTimeout(resolve, 1000));
+            // 定義全局 downloadFile 函數，使其可以被 onclick 事件調用
+            window.downloadFile = async function(url, filename) {
+                try {
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    // 等待一下確保下載開始
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    console.error('下載文件失敗:', error);
+                    alert('下載失敗: ' + error.message);
+                }
             }
 
             // 初始化拖放和提交處理
@@ -987,32 +1009,53 @@
                 try {
                     const response = await fetch('/processed-files');
                     const files = await response.json();
-                    const filesGrid = document.getElementById('filesList');
+                    const azureFilesGrid = document.getElementById('azureFilesList');
+                    const tencentFilesGrid = document.getElementById('tencentFilesList');
                     
-                    if (files.length === 0) {
-                        filesGrid.innerHTML = `
+                    const azureFiles = files.filter(file => file.type === 'Azure');
+                    const tencentFiles = files.filter(file => file.type === 'Tencent');
+                    
+                    // 處理 Azure 文件列表
+                    if (azureFiles.length === 0) {
+                        azureFilesGrid.innerHTML = `
                             <div class="empty-state">
                                 <i class="fas fa-folder-open"></i>
-                                <p>暫無處理完成的檔案</p>
+                                <p>暫無處理完成的 Azure 報表檔案</p>
                             </div>
                         `;
-                        return;
-                    }
-
-                    filesGrid.innerHTML = files.map(file => `
-                        <div class="file-card">
-                            <div>
-                                <div style="font-weight: 600; margin-bottom: 4px;">${file.name}</div>
-                                <small style="color: #666; display: block;"><i class="fas fa-file-${file.type === 'Azure' ? 'excel' : 'csv'}"></i> ${file.type} 報表</small>
+                    } else {
+                        azureFilesGrid.innerHTML = azureFiles.map(file => `
+                            <div class="file-card">
+                                <span><i class="fas fa-file-excel"></i> ${file.name}</span>
+                                <button class="download-btn" onclick="downloadFile('${file.path}', '${file.name}')">
+                                    <i class="fas fa-download"></i>
+                                    下載
+                                </button>
                             </div>
-                            <a href="${file.path}" class="download-btn" download>
-                                <i class="fas fa-download"></i>
-                                下載報表
-                            </a>
-                        </div>
-                    `).join('');
+                        `).join('');
+                    }
+                    
+                    // 處理騰訊雲文件列表
+                    if (tencentFiles.length === 0) {
+                        tencentFilesGrid.innerHTML = `
+                            <div class="empty-state">
+                                <i class="fas fa-folder-open"></i>
+                                <p>暫無處理完成的騰訊雲報表檔案</p>
+                            </div>
+                        `;
+                    } else {
+                        tencentFilesGrid.innerHTML = tencentFiles.map(file => `
+                            <div class="file-card">
+                                <span><i class="fas fa-file-excel"></i> ${file.name}</span>
+                                <button class="download-btn" onclick="downloadFile('${file.path}', '${file.name}')">
+                                    <i class="fas fa-download"></i>
+                                    下載
+                                </button>
+                            </div>
+                        `).join('');
+                    }
                 } catch (error) {
-                    console.error('載入檔案列表失敗:', error);
+                    console.error('加載文件列表失敗:', error);
                 }
             }
 
@@ -1071,6 +1114,9 @@
                 }, 5000);
             }
         }
+
+        // 已移除重複定義的函數
+        // 已移除重複定義的函數
     </script>
 </body>
 </html>

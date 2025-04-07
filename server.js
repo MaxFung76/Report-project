@@ -82,6 +82,9 @@ app.post('/process-tencent', async (req, res) => {
 
 // 添加下載目錄的靜態服務
 app.use('/downloads', express.static(downloadsDir));
+// 添加Azure和騰訊雲輸出目錄的靜態訪問
+app.use('/downloads/azure', express.static(azureOutputDir));
+app.use('/downloads/tencent', express.static(tencentOutputDir));
 
 // 添加獲取處理後文件列表的路由
 app.get('/processed-files', (req, res) => {
@@ -163,6 +166,142 @@ app.get('/download-all', async (req, res) => {
         res.status(500).json({
             success: false,
             message: '打包文件失敗: ' + error.message
+        });
+    }
+});
+
+// 添加下載所有 Azure 報表文件的路由
+app.get('/download-azure-all', async (req, res) => {
+    try {
+        // 檢查是否有 Azure 報表文件
+        const azureFiles = fs.readdirSync(azureOutputDir);
+        if (azureFiles.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: '暫無可下載的 Azure 報表檔案'
+            });
+        }
+        
+        // 創建一個唯一的文件名
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const zipFileName = `azure_reports_${timestamp}.zip`;
+        const zipFilePath = path.join(downloadsDir, zipFileName);
+        
+        // 創建一個可寫流
+        const output = fs.createWriteStream(zipFilePath);
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // 設置壓縮級別
+        });
+        
+        // 監聽所有存檔數據寫入完成
+        output.on('close', () => {
+            console.log(`${archive.pointer()} 總字節數`); 
+            console.log('Azure 報表存檔已完成並且輸出文件已關閉');
+            res.json({
+                success: true,
+                message: 'Azure 報表文件已打包完成',
+                zipPath: `/downloads/${zipFileName}`
+            });
+        });
+        
+        // 監聽警告
+        archive.on('warning', (err) => {
+            if (err.code === 'ENOENT') {
+                console.warn('警告:', err);
+            } else {
+                throw err;
+            }
+        });
+        
+        // 監聽錯誤
+        archive.on('error', (err) => {
+            throw err;
+        });
+        
+        // 將存檔數據通過管道傳輸到文件
+        archive.pipe(output);
+        
+        // 添加 Azure 報表文件到存檔
+        azureFiles.forEach(file => {
+            const filePath = path.join(azureOutputDir, file);
+            archive.file(filePath, { name: file });
+        });
+        
+        // 完成存檔
+        await archive.finalize();
+    } catch (error) {
+        console.error('打包 Azure 報表文件時發生錯誤:', error);
+        res.status(500).json({
+            success: false,
+            message: '打包 Azure 報表文件失敗: ' + error.message
+        });
+    }
+});
+
+// 添加下載所有騰訊雲報表文件的路由
+app.get('/download-tencent-all', async (req, res) => {
+    try {
+        // 檢查是否有騰訊雲報表文件
+        const tencentFiles = fs.readdirSync(tencentOutputDir);
+        if (tencentFiles.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: '暫無可下載的騰訊雲報表檔案'
+            });
+        }
+        
+        // 創建一個唯一的文件名
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const zipFileName = `tencent_reports_${timestamp}.zip`;
+        const zipFilePath = path.join(downloadsDir, zipFileName);
+        
+        // 創建一個可寫流
+        const output = fs.createWriteStream(zipFilePath);
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // 設置壓縮級別
+        });
+        
+        // 監聽所有存檔數據寫入完成
+        output.on('close', () => {
+            console.log(`${archive.pointer()} 總字節數`); 
+            console.log('騰訊雲報表存檔已完成並且輸出文件已關閉');
+            res.json({
+                success: true,
+                message: '騰訊雲報表文件已打包完成',
+                zipPath: `/downloads/${zipFileName}`
+            });
+        });
+        
+        // 監聽警告
+        archive.on('warning', (err) => {
+            if (err.code === 'ENOENT') {
+                console.warn('警告:', err);
+            } else {
+                throw err;
+            }
+        });
+        
+        // 監聽錯誤
+        archive.on('error', (err) => {
+            throw err;
+        });
+        
+        // 將存檔數據通過管道傳輸到文件
+        archive.pipe(output);
+        
+        // 添加騰訊雲報表文件到存檔
+        tencentFiles.forEach(file => {
+            const filePath = path.join(tencentOutputDir, file);
+            archive.file(filePath, { name: file });
+        });
+        
+        // 完成存檔
+        await archive.finalize();
+    } catch (error) {
+        console.error('打包騰訊雲報表文件時發生錯誤:', error);
+        res.status(500).json({
+            success: false,
+            message: '打包騰訊雲報表文件失敗: ' + error.message
         });
     }
 });
