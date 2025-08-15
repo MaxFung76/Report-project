@@ -188,36 +188,22 @@ const tencentOutputDir = './output/tencent'; // 騰訊雲輸出目錄
 {
   "azure": [
     {
-      "name": "BlueTop_Group_processed.xlsx",
+      "name": "Customer_Name_processed.xlsx",
       "size": "63.42 kB",
       "time": "8/15/2025, 9:16:22 AM",
-      "path": "/downloads/azure/BlueTop_Group_processed.xlsx"
+      "path": "/downloads/azure/Customer_Name_processed.xlsx"
     }
   ],
   "tencent": [
     {
-      "name": "output_200023222851_2025-08-15T09-37-57.xlsx",
+      "name": "output_{owner_id}_{timestamp}.xlsx",
       "size": "16.76 kB", 
       "time": "8/15/2025, 9:37:57 AM",
-      "path": "/downloads/tencent/output_200023222851_2025-08-15T09-37-57.xlsx"
+      "path": "/downloads/tencent/output_{owner_id}_{timestamp}.xlsx"
     }
   ]
 }
 ```
-
-## 🎯 處理能力
-
-### Azure報表處理
-- **處理規模**: 782條記錄 → 23個客戶文件
-- **處理時間**: < 5秒
-- **刪除列**: PartnerId, CustomerId, InvoiceNumber, MpnId, Tier2MpnId, Bill to, PriceAdjustmentDescription, EffectiveUnitPrice
-- **計算邏輯**: Subtotal = UnitPrice × BillableQuantity, Total = Subtotal
-
-### 騰訊雲報表處理
-- **處理規模**: 120條記錄 → 9個賬戶文件
-- **處理時間**: < 3秒
-- **保留字段**: 14個標準字段（Owner Account ID, ProductName, SubproductName等）
-- **計算邏輯**: Total Cost = OriginalCost × Discount Multiplier
 
 ## 🐛 故障排除
 
