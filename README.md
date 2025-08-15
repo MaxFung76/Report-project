@@ -94,7 +94,6 @@ npm start          # 啟動生產服務器
 2. 在Azure區域選擇或拖拽 `.xlsx` 文件
 3. 系統自動處理數據：
    - 過濾無效數據（刪除Quantity為空的行）
-   - 排除Bill to為'Accord'的數據
    - 刪除8個不需要的列（包括Tier2MpnId）
    - 按客戶名稱分組
    - 計算Subtotal和Total
