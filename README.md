@@ -358,20 +358,6 @@ docker run -d -p 3001:3001 --name excel-report excel-report-system
 - 簡單HTML界面
 - Node.js + Python混合架構
 
-## 📊 系統截圖
-
-### 主界面
-![主界面](https://via.placeholder.com/800x400/667eea/ffffff?text=現代化主界面)
-
-### 文件上傳
-![文件上傳](https://via.placeholder.com/800x400/48bb78/ffffff?text=拖拽上傳界面)
-
-### 文件管理
-![文件管理](https://via.placeholder.com/800x400/9f7aea/ffffff?text=文件管理界面)
-
-### 暗色模式
-![暗色模式](https://via.placeholder.com/800x400/2d3748/ffffff?text=暗色模式界面)
-
 ---
 
 **讓Excel報表處理變得簡單高效！** 🚀
