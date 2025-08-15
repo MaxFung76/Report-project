@@ -29,10 +29,13 @@ ensureDirectories();
 
 // Middleware setup
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'], // 允許React開發服務器訪問
+    origin: ['http://localhost:5173', 'http://localhost:3000', `http://59.148.172.2:3001`], // 允許React開發服務器和生產環境訪問
     credentials: true
 }));
 app.use(express.json());
+
+// 服務構建後的前端文件
+app.use(express.static(path.join(__dirname, 'dist')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(fileUpload({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB 限制
@@ -66,7 +69,7 @@ const processAzureData = (data) => {
         
         // 需要刪除的列
         const columnsToDelete = [
-            'PartnerId', 'CustomerId', 'InvoiceNumber', 'MpnId',
+            'PartnerId', 'CustomerId', 'InvoiceNumber', 'MpnId', 'Tier2MpnId',
             'Bill to', 'PriceAdjustmentDescription', 'EffectiveUnitPrice'
         ];
         
@@ -103,15 +106,15 @@ const processAzureData = (data) => {
 
         return groupedData;
     } catch (error) {
-        console.error('Azure data processing error:', error);
-        throw new Error('Azure數據處理失敗');
+        console.error('處理Azure數據時出錯:', error);
+        throw error;
     }
 };
 
 // 處理騰訊雲數據的函數
 const processTencentData = (data) => {
     try {
-        // 需要保留的列
+        // 定義需要保留的列
         const columnsToKeep = [
             'Owner Account ID', 'ProductName', 'SubproductName', 'BillingMode',
             'ProjectName', 'Region', 'InstanceID', 'InstanceName', 'TransactionType',
@@ -119,382 +122,56 @@ const processTencentData = (data) => {
             'Configuration Description', 'OriginalCost'
         ];
 
-        const processedData = data.map(row => {
-            const newRow = {};
-            // 只保留指定的列
-            columnsToKeep.forEach(col => {
-                if (row[col] !== undefined) newRow[col] = row[col];
-            });
-            // 添加 Discount Multiplier 和計算 Total Cost
-            newRow['Discount Multiplier'] = 1;
-            const originalCost = parseFloat(newRow['OriginalCost']) || 0;
-            newRow['Total Cost'] = originalCost * newRow['Discount Multiplier'];
-            return newRow;
-        });
+        // 過濾和處理數據
+        const filteredData = data
+            .filter(row => {
+                // 確保必要字段存在
+                return row['Owner Account ID'] && row['OriginalCost'];
+            })
+            .map(row => {
+                // 創建過濾後的行，只保留需要的列
+                const filteredRow = {};
+                columnsToKeep.forEach(col => {
+                    filteredRow[col] = row[col] || '';
+                });
 
-        // 按 Owner Account ID 分組
-        const groupedData = processedData.reduce((acc, row) => {
+                // 處理OriginalCost字段
+                const originalCost = parseFloat(filteredRow['OriginalCost']) || 0;
+                filteredRow['OriginalCost'] = originalCost;
+                
+                // 添加Discount Multiplier列，統一設為1
+                filteredRow['Discount Multiplier'] = 1;
+                
+                // 計算Total Cost
+                filteredRow['Total Cost'] = originalCost * filteredRow['Discount Multiplier'];
+
+                return filteredRow;
+            });
+
+        // 按Owner Account ID分組
+        const groupedData = filteredData.reduce((acc, row) => {
             const ownerId = row['Owner Account ID'];
-            if (!acc[ownerId]) acc[ownerId] = [];
-            acc[ownerId].push(row);
+            if (!acc[ownerId]) {
+                acc[ownerId] = {
+                    rows: [],
+                    total: 0
+                };
+            }
+            acc[ownerId].rows.push(row);
+            acc[ownerId].total += row['Total Cost'];
             return acc;
         }, {});
 
         return groupedData;
     } catch (error) {
-        console.error('Tencent data processing error:', error);
-        throw new Error('騰訊雲數據處理失敗');
+        console.error('處理騰訊雲數據時出錯:', error);
+        throw error;
     }
 };
 
-// 保存Azure數據
-const saveAzureData = (processedData) => {
-    const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const sheetName = `${lastMonth.toLocaleString('en', { month: 'short' })}_${lastMonth.getFullYear()}`;
-    const timestamp = now.toISOString().replace(/[:.]/g, '-').split('T')[0];
+// API路由
 
-    const savedFiles = [];
-
-    for (const [customer, data] of Object.entries(processedData)) {
-        const workbook = xlsx.utils.book_new();
-        
-        // 添加所有行
-        const worksheet = xlsx.utils.json_to_sheet(data.rows);
-        
-        // 添加總計行
-        const totalRow = { CustomerName: 'Total', Total: data.total };
-        const totalRowPos = data.rows.length + 2; // 空一行後添加總計
-        xlsx.utils.sheet_add_json(worksheet, [totalRow], {
-            skipHeader: true,
-            origin: `A${totalRowPos}`
-        });
-        
-        xlsx.utils.book_append_sheet(workbook, worksheet, sheetName);
-        
-        const fileName = `${customer}_${timestamp}.xlsx`;
-        const filePath = path.join(azureOutputDir, fileName);
-        xlsx.writeFile(workbook, filePath);
-        
-        savedFiles.push({
-            name: fileName,
-            path: filePath,
-            customer: customer,
-            recordCount: data.rows.length,
-            total: data.total
-        });
-    }
-
-    return savedFiles;
-};
-
-// 保存騰訊雲數據
-const saveTencentData = (processedData) => {
-    const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const sheetName = `${lastMonth.toLocaleString('en', { month: 'short' })}_${lastMonth.getFullYear()}`;
-    const timestamp = now.toISOString().replace(/[:.]/g, '-').split('T')[0];
-
-    const savedFiles = [];
-
-    for (const [ownerId, data] of Object.entries(processedData)) {
-        const workbook = xlsx.utils.book_new();
-        const worksheet = xlsx.utils.json_to_sheet(data);
-        xlsx.utils.book_append_sheet(workbook, worksheet, sheetName);
-        
-        const fileName = `tencent_${ownerId}_${timestamp}.xlsx`;
-        const filePath = path.join(tencentOutputDir, fileName);
-        xlsx.writeFile(workbook, filePath);
-        
-        savedFiles.push({
-            name: fileName,
-            path: filePath,
-            ownerId: ownerId,
-            recordCount: data.length
-        });
-    }
-
-    return savedFiles;
-};
-
-// Azure 報表處理路由
-app.post('/api/process-azure', async (req, res) => {
-    try {
-        if (!req.files || !req.files.file) {
-            return res.status(400).json({
-                success: false,
-                message: '未上傳文件'
-            });
-        }
-
-        const file = req.files.file;
-        
-        // 驗證文件類型
-        if (!validateFileType(file, ['.xlsx'])) {
-            return res.status(400).json({
-                success: false,
-                message: '請上傳 .xlsx 格式的文件'
-            });
-        }
-
-        console.log(`Processing Azure file: ${file.name}`);
-        
-        // 讀取Excel文件
-        const workbook = xlsx.read(file.data);
-        const sheetName = workbook.SheetNames[0];
-        const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
-        if (data.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: '文件中沒有有效數據'
-            });
-        }
-
-        // 處理數據
-        const processedData = processAzureData(data);
-        
-        // 保存處理後的文件
-        const savedFiles = saveAzureData(processedData);
-
-        res.json({
-            success: true,
-            message: `Azure 報表處理成功，生成了 ${savedFiles.length} 個文件`,
-            files: savedFiles,
-            summary: {
-                totalCustomers: savedFiles.length,
-                totalRecords: savedFiles.reduce((sum, file) => sum + file.recordCount, 0),
-                totalAmount: savedFiles.reduce((sum, file) => sum + file.total, 0)
-            }
-        });
-    } catch (error) {
-        console.error('Azure processing error:', error);
-        res.status(500).json({
-            success: false,
-            message: '處理失敗：' + error.message
-        });
-    }
-});
-
-// 騰訊雲報表處理路由
-app.post('/api/process-tencent', async (req, res) => {
-    try {
-        if (!req.files || !req.files.file) {
-            return res.status(400).json({
-                success: false,
-                message: '未上傳文件'
-            });
-        }
-
-        const file = req.files.file;
-        
-        // 驗證文件類型
-        if (!validateFileType(file, ['.xlsx', '.csv'])) {
-            return res.status(400).json({
-                success: false,
-                message: '請上傳 .xlsx 或 .csv 格式的文件'
-            });
-        }
-
-        console.log(`Processing Tencent file: ${file.name}`);
-        
-        // 讀取文件
-        let data;
-        if (file.name.toLowerCase().endsWith('.csv')) {
-            // 處理CSV文件
-            const csvData = file.data.toString('utf8');
-            const workbook = xlsx.read(csvData, { type: 'string' });
-            const sheetName = workbook.SheetNames[0];
-            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-        } else {
-            // 處理Excel文件
-            const workbook = xlsx.read(file.data);
-            const sheetName = workbook.SheetNames[0];
-            data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-        }
-
-        if (data.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: '文件中沒有有效數據'
-            });
-        }
-
-        // 處理數據
-        const processedData = processTencentData(data);
-        
-        // 保存處理後的文件
-        const savedFiles = saveTencentData(processedData);
-
-        res.json({
-            success: true,
-            message: `騰訊雲報表處理成功，生成了 ${savedFiles.length} 個文件`,
-            files: savedFiles,
-            summary: {
-                totalOwners: savedFiles.length,
-                totalRecords: savedFiles.reduce((sum, file) => sum + file.recordCount, 0)
-            }
-        });
-    } catch (error) {
-        console.error('Tencent processing error:', error);
-        res.status(500).json({
-            success: false,
-            message: '處理失敗：' + error.message
-        });
-    }
-});
-
-// 獲取處理後文件列表的路由
-app.get('/api/processed-files', (req, res) => {
-    try {
-        const azureFiles = fs.readdirSync(azureOutputDir).map(file => ({
-            name: file,
-            type: 'azure',
-            path: `/api/download/azure/${file}`,
-            size: fs.statSync(path.join(azureOutputDir, file)).size,
-            createdAt: fs.statSync(path.join(azureOutputDir, file)).mtime
-        }));
-
-        const tencentFiles = fs.readdirSync(tencentOutputDir).map(file => ({
-            name: file,
-            type: 'tencent',
-            path: `/api/download/tencent/${file}`,
-            size: fs.statSync(path.join(tencentOutputDir, file)).size,
-            createdAt: fs.statSync(path.join(tencentOutputDir, file)).mtime
-        }));
-
-        res.json({
-            success: true,
-            files: {
-                azure: azureFiles,
-                tencent: tencentFiles
-            },
-            summary: {
-                totalFiles: azureFiles.length + tencentFiles.length,
-                azureCount: azureFiles.length,
-                tencentCount: tencentFiles.length
-            }
-        });
-    } catch (error) {
-        console.error('Get files error:', error);
-        res.status(500).json({
-            success: false,
-            message: '獲取文件列表失敗'
-        });
-    }
-});
-
-// 文件下載路由
-app.get('/api/download/azure/:filename', (req, res) => {
-    const filePath = path.join(azureOutputDir, req.params.filename);
-    if (fs.existsSync(filePath)) {
-        res.download(filePath);
-    } else {
-        res.status(404).json({ success: false, message: '文件不存在' });
-    }
-});
-
-app.get('/api/download/tencent/:filename', (req, res) => {
-    const filePath = path.join(tencentOutputDir, req.params.filename);
-    if (fs.existsSync(filePath)) {
-        res.download(filePath);
-    } else {
-        res.status(404).json({ success: false, message: '文件不存在' });
-    }
-});
-
-// 批量下載路由
-app.get('/api/download-all/:type', async (req, res) => {
-    try {
-        const type = req.params.type; // 'azure', 'tencent', or 'all'
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-        
-        let zipFileName, sourceDir, files;
-        
-        if (type === 'azure') {
-            zipFileName = `azure_reports_${timestamp}.zip`;
-            files = fs.readdirSync(azureOutputDir).map(file => ({
-                path: path.join(azureOutputDir, file),
-                name: `Azure/${file}`
-            }));
-        } else if (type === 'tencent') {
-            zipFileName = `tencent_reports_${timestamp}.zip`;
-            files = fs.readdirSync(tencentOutputDir).map(file => ({
-                path: path.join(tencentOutputDir, file),
-                name: `Tencent/${file}`
-            }));
-        } else if (type === 'all') {
-            zipFileName = `all_reports_${timestamp}.zip`;
-            files = [
-                ...fs.readdirSync(azureOutputDir).map(file => ({
-                    path: path.join(azureOutputDir, file),
-                    name: `Azure/${file}`
-                })),
-                ...fs.readdirSync(tencentOutputDir).map(file => ({
-                    path: path.join(tencentOutputDir, file),
-                    name: `Tencent/${file}`
-                }))
-            ];
-        } else {
-            return res.status(400).json({
-                success: false,
-                message: '無效的下載類型'
-            });
-        }
-
-        if (files.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: '沒有可下載的文件'
-            });
-        }
-
-        const zipFilePath = path.join(downloadsDir, zipFileName);
-        const output = fs.createWriteStream(zipFilePath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
-
-        output.on('close', () => {
-            console.log(`Archive created: ${zipFilePath} (${archive.pointer()} bytes)`);
-            res.download(zipFilePath, zipFileName, (err) => {
-                if (err) {
-                    console.error('Download error:', err);
-                }
-                // 清理臨時文件
-                setTimeout(() => {
-                    if (fs.existsSync(zipFilePath)) {
-                        fs.unlinkSync(zipFilePath);
-                    }
-                }, 5000);
-            });
-        });
-
-        archive.on('error', (err) => {
-            console.error('Archive error:', err);
-            res.status(500).json({
-                success: false,
-                message: '創建壓縮文件失敗'
-            });
-        });
-
-        archive.pipe(output);
-
-        files.forEach(file => {
-            if (fs.existsSync(file.path)) {
-                archive.file(file.path, { name: file.name });
-            }
-        });
-
-        await archive.finalize();
-    } catch (error) {
-        console.error('Batch download error:', error);
-        res.status(500).json({
-            success: false,
-            message: '批量下載失敗：' + error.message
-        });
-    }
-});
-
-// 健康檢查路由
+// 健康檢查端點
 app.get('/api/health', (req, res) => {
     res.json({
         success: true,
@@ -504,15 +181,321 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// 使用錯誤處理中間件
+// 獲取已處理文件列表
+app.get('/api/processed-files', (req, res) => {
+    try {
+        const getFileDetails = (dir, files) => {
+            return files.map(file => {
+                const filePath = path.join(dir, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    name: file,
+                    size: stats.size,
+                    createdAt: stats.mtime.toISOString(),
+                    path: `/downloads/${path.basename(dir)}/${file}`
+                };
+            });
+        };
+
+        const azureFiles = fs.existsSync(azureOutputDir) ? 
+            fs.readdirSync(azureOutputDir).filter(file => file.endsWith('.xlsx')) : [];
+        const tencentFiles = fs.existsSync(tencentOutputDir) ? 
+            fs.readdirSync(tencentOutputDir).filter(file => file.endsWith('.xlsx')) : [];
+
+        res.json({
+            success: true,
+            files: {
+                azure: getFileDetails(azureOutputDir, azureFiles),
+                tencent: getFileDetails(tencentOutputDir, tencentFiles)
+            },
+            summary: {
+                totalFiles: azureFiles.length + tencentFiles.length,
+                azureCount: azureFiles.length,
+                tencentCount: tencentFiles.length
+            }
+        });
+    } catch (error) {
+        console.error('獲取文件列表時出錯:', error);
+        res.status(500).json({
+            success: false,
+            message: '獲取文件列表失敗',
+            error: error.message
+        });
+    }
+});
+
+// 處理Azure報表
+app.post('/api/process-azure', (req, res) => {
+    try {
+        if (!req.files || !req.files.file) {
+            return res.status(400).json({
+                success: false,
+                message: '請選擇要上傳的文件'
+            });
+        }
+
+        const file = req.files.file;
+        
+        // 驗證文件類型
+        if (!validateFileType(file, ['.xlsx'])) {
+            return res.status(400).json({
+                success: false,
+                message: 'Azure報表僅支持 .xlsx 格式'
+            });
+        }
+
+        // 讀取Excel文件
+        const workbook = xlsx.read(file.data, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = xlsx.utils.sheet_to_json(worksheet);
+
+        if (data.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: '文件中沒有找到數據'
+            });
+        }
+
+        // 處理數據
+        const groupedData = processAzureData(data);
+        const processedFiles = [];
+
+        // 為每個客戶創建單獨的文件
+        Object.keys(groupedData).forEach(customer => {
+            const customerData = groupedData[customer];
+            const newWorkbook = xlsx.utils.book_new();
+            const newWorksheet = xlsx.utils.json_to_sheet(customerData.rows);
+            
+            xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, 'Data');
+            
+            const fileName = `${customer.replace(/[^a-zA-Z0-9]/g, '_')}_processed.xlsx`;
+            const filePath = path.join(azureOutputDir, fileName);
+            
+            xlsx.writeFile(newWorkbook, filePath);
+            
+            // 複製文件到下載目錄
+            const downloadPath = path.join(downloadsDir, 'azure', fileName);
+            fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
+            fs.copyFileSync(filePath, downloadPath);
+            
+            processedFiles.push(fileName);
+        });
+
+        res.json({
+            success: true,
+            message: 'Azure報表處理完成',
+            files: processedFiles,
+            summary: {
+                totalRecords: data.length,
+                processedFiles: processedFiles.length
+            }
+        });
+
+    } catch (error) {
+        console.error('處理Azure報表時出錯:', error);
+        res.status(500).json({
+            success: false,
+            message: '處理Azure報表失敗',
+            error: error.message
+        });
+    }
+});
+
+// 處理騰訊雲報表
+app.post('/api/process-tencent', (req, res) => {
+    try {
+        if (!req.files || !req.files.file) {
+            return res.status(400).json({
+                success: false,
+                message: '請選擇要上傳的文件'
+            });
+        }
+
+        const file = req.files.file;
+        
+        // 驗證文件類型
+        if (!validateFileType(file, ['.xlsx', '.csv'])) {
+            return res.status(400).json({
+                success: false,
+                message: '騰訊雲報表支持 .xlsx 和 .csv 格式'
+            });
+        }
+
+        let data;
+        
+        // 根據文件類型讀取數據
+        if (path.extname(file.name).toLowerCase() === '.csv') {
+            const csvData = file.data.toString('utf8');
+            const workbook = xlsx.read(csvData, { type: 'string' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            data = xlsx.utils.sheet_to_json(worksheet);
+        } else {
+            const workbook = xlsx.read(file.data, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            data = xlsx.utils.sheet_to_json(worksheet);
+        }
+
+        if (data.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: '文件中沒有找到數據'
+            });
+        }
+
+        // 處理數據
+        const groupedData = processTencentData(data);
+        const processedFiles = [];
+
+        // 為每個Owner Account ID創建單獨的文件
+        Object.keys(groupedData).forEach(ownerId => {
+            const ownerData = groupedData[ownerId];
+            const newWorkbook = xlsx.utils.book_new();
+            
+            // 獲取工作表名稱（上個月的年月）
+            const lastMonth = new Date();
+            lastMonth.setMonth(lastMonth.getMonth() - 1);
+            const sheetName = lastMonth.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '_');
+            
+            const newWorksheet = xlsx.utils.json_to_sheet(ownerData.rows);
+            xlsx.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
+            
+            // 使用時間戳命名文件
+            const currentTime = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            const fileName = `output_${ownerId}_${currentTime}.xlsx`;
+            const filePath = path.join(tencentOutputDir, fileName);
+            
+            xlsx.writeFile(newWorkbook, filePath);
+            
+            // 複製文件到下載目錄
+            const downloadPath = path.join(downloadsDir, 'tencent', fileName);
+            fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
+            fs.copyFileSync(filePath, downloadPath);
+            
+            processedFiles.push(fileName);
+        });
+
+        res.json({
+            success: true,
+            message: '騰訊雲報表處理完成',
+            files: processedFiles,
+            summary: {
+                totalRecords: data.length,
+                processedFiles: processedFiles.length
+            }
+        });
+
+    } catch (error) {
+        console.error('處理騰訊雲報表時出錯:', error);
+        res.status(500).json({
+            success: false,
+            message: '處理騰訊雲報表失敗',
+            error: error.message
+        });
+    }
+});
+
+// 批量下載文件
+app.get('/api/download-all/:type', (req, res) => {
+    try {
+        const { type } = req.params;
+        let sourceDir;
+        let zipName;
+
+        if (type === 'azure') {
+            sourceDir = azureOutputDir;
+            zipName = 'azure_reports.zip';
+        } else if (type === 'tencent') {
+            sourceDir = tencentOutputDir;
+            zipName = 'tencent_reports.zip';
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: '無效的文件類型，請使用 azure 或 tencent'
+            });
+        }
+
+        if (!fs.existsSync(sourceDir)) {
+            return res.status(404).json({
+                success: false,
+                message: '沒有找到相關文件'
+            });
+        }
+
+        const files = fs.readdirSync(sourceDir).filter(file => file.endsWith('.xlsx'));
+        
+        if (files.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: '沒有找到可下載的文件'
+            });
+        }
+
+        // 設置響應頭
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`);
+
+        // 創建zip壓縮流
+        const archive = archiver('zip', {
+            zlib: { level: 9 }
+        });
+
+        archive.on('error', (err) => {
+            console.error('壓縮文件時出錯:', err);
+            res.status(500).json({
+                success: false,
+                message: '壓縮文件失敗'
+            });
+        });
+
+        // 將壓縮流管道到響應
+        archive.pipe(res);
+
+        // 添加文件到壓縮包
+        files.forEach(file => {
+            const filePath = path.join(sourceDir, file);
+            archive.file(filePath, { name: file });
+        });
+
+        // 完成壓縮
+        archive.finalize();
+
+    } catch (error) {
+        console.error('下載文件時出錯:', error);
+        res.status(500).json({
+            success: false,
+            message: '下載文件失敗',
+            error: error.message
+        });
+    }
+});
+
+// 錯誤處理中間件
 app.use(errorHandler);
 
+// Catch-all handler: 將所有非API請求重定向到前端應用
+app.get('*', (req, res) => {
+    // 如果是API請求，返回404
+    if (req.path.startsWith('/api/')) {
+        return res.status(404).json({
+            success: false,
+            message: 'API端點不存在'
+        });
+    }
+    
+    // 否則返回前端應用的index.html
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // 啟動服務器
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`
-🚀 Excel 報表處理系統後端服務器已啟動
+🚀 Excel 報表處理系統已啟動
 📍 端口: ${port}
-🌐 健康檢查: http://localhost:${port}/api/health
+🌐 前端界面: http://localhost:${port}
+🔗 健康檢查: http://localhost:${port}/api/health
 📁 輸出目錄:
    - Azure: ${azureOutputDir}
    - 騰訊雲: ${tencentOutputDir}

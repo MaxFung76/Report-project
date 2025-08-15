@@ -56,8 +56,8 @@ function App() {
       setUploadProgress(prev => ({ ...prev, [fileId]: 20 }))
       
       const endpoint = type === 'azure' ? 
-        'http://localhost:3001/api/process-azure' : 
-        'http://localhost:3001/api/process-tencent'
+        '/api/process-azure' : 
+        '/api/process-tencent'
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -95,7 +95,7 @@ function App() {
   // 載入處理後的文件列表
   const loadProcessedFiles = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/processed-files')
+      const response = await fetch('/api/processed-files')
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
@@ -107,7 +107,7 @@ function App() {
               size: file.size,
               processedAt: file.createdAt,
               status: 'completed',
-              downloadUrl: `http://localhost:3001${file.path}`
+              downloadUrl: `${file.path}`
             })),
             tencent: data.files.tencent.map(file => ({
               id: file.name,
@@ -116,7 +116,7 @@ function App() {
               size: file.size,
               processedAt: file.createdAt,
               status: 'completed',
-              downloadUrl: `http://localhost:3001${file.path}`
+              downloadUrl: `${file.path}`
             }))
           })
         }
@@ -145,7 +145,7 @@ function App() {
   // 批量下載
   const downloadAllFiles = async (type) => {
     try {
-      const url = `http://localhost:3001/api/download-all/${type}`
+      const url = `/api/download-all/${type}`
       const link = document.createElement('a')
       link.href = url
       link.target = '_blank'
